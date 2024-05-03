@@ -32,6 +32,13 @@ LABEL DEVELOPMENT="                                                         \
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+RUN apt update                              && \
+    apt -y upgrade                          && \
+    apt-get install -y apt-transport-https  && \
+    apt -y install ssh iputils-ping         && \
+    apt -y install vim telnet netcat-traditional procps && \
+    apt -y install gcc python3-dev
+
 
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip
@@ -44,23 +51,20 @@ RUN pip install -r /tmp/requirements.txt && rm -v /tmp/requirements.txt
 # RUN pip install rich
 COPY ./pfms /app
 
-RUN apt update                              && \
-    apt -y upgrade                          && \
-    apt-get install -y apt-transport-https  && \
-    apt -y install ssh iputils-ping         && \
-    apt -y install vim telnet netcat-traditional procps 
+# In OpenShift, an arbitrary UID will be assigned, with HOME set to /
+# It will be part of the root group though, and that group will need
+# to be able to write to these locations.
+RUN for d in spleenseg/ spleenseg/analysis/ spleenseg/models/ .config/ ; do \
+      mkdir /${d} /app/${d} ; \
+      chgrp -R 0 /${d} /app/${d} ; \
+      chmod -R g+rwX /${d} /app/${d} ; \
+      chown -R 1001 /${d} /app/${d} ; \
+    done
 
-# Create the 'localuser' group with specified GID
-RUN groupadd -g 1102 localuser
+USER 1001
+RUN mkdir -p /tmp/matplotlib /tmp/hf_home
 
-# Create the 'localuser' user with specified UID, add to the group, and create home directory
-RUN useradd -u 7748 -g localuser -m -s /bin/bash localuser
-
-# Grant sudo privileges to the 'localuser' user
-RUN apt-get update && apt-get install -y sudo
-RUN echo '%localuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
-
-USER localuser
-
+ENV MPLCONFIGDIR=/tmp/matplotlib
+ENV HF_HOME=/tmp/hf_home
 ENV PORT=2024
 EXPOSE ${PORT}
